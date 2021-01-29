@@ -546,7 +546,7 @@ func (r *request) do(ctx context.Context) (*http.Response, error) {
 	// retry the request
 	if resp.Request.Response != nil &&
 		resp.Request.Response.StatusCode >= 300 &&
-		resp.Request.Response.StatusCode <= 399 {
+		resp.Request.Response.StatusCode <= 302 {
 		req.URL.Host = resp.Request.URL.Host
 		req.Host = resp.Request.URL.Host
 		if err = r.authorize(ctx, req); err != nil {
