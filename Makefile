@@ -52,14 +52,14 @@ else
 	endif
 endif
 
-ifndef GODEBUG
-	EXTRA_LDFLAGS += -s -w
-	DEBUG_GO_GCFLAGS :=
-	DEBUG_TAGS :=
-else
+# ifndef GODEBUG
+# 	EXTRA_LDFLAGS += -s -w
+# 	DEBUG_GO_GCFLAGS :=
+# 	DEBUG_TAGS :=
+# else
 	DEBUG_GO_GCFLAGS := -gcflags=all="-N -l"
 	DEBUG_TAGS := static_build
-endif
+# endif
 
 WHALE = "🇩"
 ONI = "👹"

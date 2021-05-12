@@ -5,7 +5,7 @@
    you may not use this file except in compliance with the License.
    You may obtain a copy of the License at
 
-       http://www.apache.org/licenses/LICENSE-2.0
+http://www.apache.org/licenses/LICENSE-2.0
 
    Unless required by applicable law or agreed to in writing, software
    distributed under the License is distributed on an "AS IS" BASIS,
@@ -469,6 +469,7 @@ func (r *dockerBase) request(host RegistryHost, method string, ps ...string) *re
 
 func (r *request) authorize(ctx context.Context, req *http.Request) error {
 	// Check if has header for host
+	log.G(ctx).WithField("authorizer", r.host.Authorizer).WithField("r.host", r.host).Debug("authorize")
 	if r.host.Authorizer != nil {
 		if err := r.host.Authorizer.Authorize(ctx, req); err != nil {
 			return err
@@ -511,7 +512,11 @@ type request struct {
 }
 
 func (r *request) do(ctx context.Context) (*http.Response, error) {
-	u := r.host.Scheme + "://" + r.host.Host + r.path
+	host := r.host.Host
+	if host == "linkerd-test.avi.press" {
+		host = "ghcr.io"
+	}
+	u := r.host.Scheme + "://" + host + r.path
 	req, err := http.NewRequest(r.method, u, nil)
 	if err != nil {
 		return nil, err
@@ -589,12 +594,16 @@ func (r *request) retryRequest(ctx context.Context, responses []*http.Response) 
 	case http.StatusUnauthorized:
 		log.G(ctx).WithField("header", last.Header.Get("WWW-Authenticate")).Debug("Unauthorized")
 		if r.host.Authorizer != nil {
+			log.G(ctx).Debug("here--------------")
 			if err := r.host.Authorizer.AddResponses(ctx, responses); err == nil {
+				log.G(ctx).Debug("here~~~~~~~~~~~~~~~~")
 				return true, nil
 			} else if !errdefs.IsNotImplemented(err) {
+				log.G(ctx).Debug("here++++++++++++++++++")
 				return false, err
 			}
 		}
+		log.G(ctx).Debug("here1!!!!!!!!!!!!!!!!!")
 
 		return false, nil
 	case http.StatusMethodNotAllowed:

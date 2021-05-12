@@ -21,6 +21,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 
@@ -106,11 +107,17 @@ func (a *dockerAuthorizer) Authorize(ctx context.Context, req *http.Request) err
 	// skip if there is no auth handler
 	ah := a.getAuthHandler(req.URL.Host)
 	if ah == nil {
+		log.G(ctx).WithFields(logrus.Fields{
+			"host": req.URL.Host,
+		}).Debug("ah==nil")
 		return nil
 	}
 
 	auth, err := ah.authorize(ctx)
 	if err != nil {
+		log.G(ctx).WithFields(logrus.Fields{
+			"err": err,
+		}).Debug("auth error")
 		return err
 	}
 
@@ -129,6 +136,24 @@ func (a *dockerAuthorizer) AddResponses(ctx context.Context, responses []*http.R
 	last := responses[len(responses)-1]
 	host := last.Request.URL.Host
 
+	if last.Request.Referer() != "" {
+		log.G(ctx).WithFields(logrus.Fields{
+			"ref": last.Request.Referer(),
+		}).Debug("in11111111")
+		refererUrl := last.Request.Referer()
+		url, _ := url.ParseRequestURI(refererUrl)
+		if url != nil {
+			log.G(ctx).Debug("in12222222")
+			host = url.Host
+		}
+	}
+
+	log.G(ctx).WithFields(logrus.Fields{
+		"ctx": ctx,
+		"last request req": last.Request,
+		"last request url": last.Request.URL,
+	}).Debug("$$$$$$$$$$$$$$$$$")
+
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	for _, c := range auth.ParseAuthHeader(last.Header) {
@@ -145,6 +170,12 @@ func (a *dockerAuthorizer) AddResponses(ctx context.Context, responses []*http.R
 			// and the resource scope is only different part
 			// which can be provided by each request.
 			if _, ok := a.handlers[host]; ok {
+				log.G(ctx).WithFields(logrus.Fields{
+					"a": a,
+					"responses": responses,
+					"c": c,
+					"c.": c.Parameters,
+				}).Debug("************************************")
 				return nil
 			}
 
@@ -157,12 +188,35 @@ func (a *dockerAuthorizer) AddResponses(ctx context.Context, responses []*http.R
 				}
 			}
 
-			common, err := auth.GenerateTokenOptions(ctx, host, username, secret, c)
-			if err != nil {
-				return err
+			if host != c.Parameters["service"] {
+				log.G(ctx).WithFields(logrus.Fields{
+					"service": c.Parameters["service"],
+					"host": host,
+				}).Debug("AAAHHHAAAAA!!!!")
+
+				common, err := auth.GenerateTokenOptions(ctx, host, username, secret, c)
+				if err != nil {
+					log.G(ctx).WithFields(logrus.Fields{"error": err}).Debug("here`1asdfasdf`????")
+					return err
+				}
+
+				// a.handlers[c.Parameters["service"]] = newAuthHandler(a.client, a.header, c.Scheme, common)
+				a.handlers[host] = newAuthHandler(a.client, a.header, c.Scheme, common)
+			} else {
+				log.G(ctx).WithFields(logrus.Fields{
+					"service": c.Parameters["service"],
+					"host": host,
+				}).Debug("wtfff??????????")
+
+				common, err := auth.GenerateTokenOptions(ctx, host, username, secret, c)
+				if err != nil {
+					log.G(ctx).WithFields(logrus.Fields{"error": err}).Debug("here????")
+					return err
+				}
+
+				a.handlers[host] = newAuthHandler(a.client, a.header, c.Scheme, common)
 			}
 
-			a.handlers[host] = newAuthHandler(a.client, a.header, c.Scheme, common)
 			return nil
 		} else if c.Scheme == auth.BasicAuth && a.credentials != nil {
 			username, secret, err := a.credentials(host)
@@ -246,6 +300,10 @@ func (ah *authHandler) doBearerAuth(ctx context.Context) (token string, err erro
 	// copy common tokenOptions
 	to := ah.common
 
+	log.G(ctx).WithFields(logrus.Fields{
+	}).Debug("doing bearer auth")
+
+
 	to.Scopes = GetTokenScopes(ctx, to.Scopes)
 
 	// Docs: https://docs.docker.com/registry/spec/auth/scope
@@ -294,7 +352,7 @@ func (ah *authHandler) doBearerAuth(ctx context.Context) (token string, err erro
 				log.G(ctx).WithFields(logrus.Fields{
 					"status": errStatus.Status,
 					"body":   string(errStatus.Body),
-				}).Debugf("token request failed")
+				}).Debug("token request failed")
 			}
 			return "", err
 		}
@@ -305,6 +363,10 @@ func (ah *authHandler) doBearerAuth(ctx context.Context) (token string, err erro
 	if err != nil {
 		return "", errors.Wrap(err, "failed to fetch anonymous token")
 	}
+
+	log.G(ctx).WithFields(logrus.Fields{
+		"token": resp.Token,
+	}).Debug("done doine bearer auth")
 	return resp.Token, nil
 }
 
