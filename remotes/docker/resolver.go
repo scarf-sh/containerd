@@ -547,8 +547,10 @@ func (r *request) do(ctx context.Context) (*http.Response, error) {
 	// of the redirect in order to generate the correct credentials, then
 	// retry the request
 	if resp.Request.Response != nil &&
-		resp.Request.Response.StatusCode >= 300 &&
-		resp.Request.Response.StatusCode <= 302 {
+		(resp.Request.Response.StatusCode == 301 ||
+		 resp.Request.Response.StatusCode == 302 ||
+		 resp.Request.Response.StatusCode == 307 ||
+		 resp.Request.Response.StatusCode == 308) {
 		req.URL.Host = resp.Request.URL.Host
 		req.Host = resp.Request.URL.Host
 		if err = r.authorize(ctx, req); err != nil {
