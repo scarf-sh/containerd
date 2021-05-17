@@ -415,6 +415,47 @@ func TestResolveProxyFallback(t *testing.T) {
 	}
 }
 
+func TestResolveRedirect(t *testing.T) {
+	var (
+		ctx  = context.Background()
+		tag  = "latest"
+		name = "redirect"
+		r    = http.NewServeMux()
+	)
+
+	s := func(h http.Handler) (string, ResolverOptions, func()) {
+		s := httptest.NewServer(h)
+
+		options := ResolverOptions{}
+		base := s.URL[7:] // strip "http://"
+		return base, options, s.Close
+	}
+
+	m := newManifest(
+		newContent(ocispec.MediaTypeImageConfig, []byte("1")),
+		newContent(ocispec.MediaTypeImageLayerGzip, []byte("2")),
+	)
+	mc := newContent(ocispec.MediaTypeImageManifest, m.OCIManifest())
+	m.RegisterHandler(r, name)
+	r.HandleFunc(fmt.Sprintf("/v2/%s/manifests/%s", name, tag), func(rw http.ResponseWriter, r *http.Request) {
+		rw.Header().Set("Location", fmt.Sprintf("/v2/test/manifests/%s", tag))
+		rw.WriteHeader(http.StatusMovedPermanently)
+	})
+	r.Handle(fmt.Sprintf("/v2/test/manifests/%s", tag), mc)
+	r.Handle(fmt.Sprintf("/v2/test/manifests/%s", mc.Digest()), mc)
+
+	base, ro, close := s(logHandler{t, r})
+	defer close()
+
+	resolver := NewResolver(ro)
+	image := fmt.Sprintf("%s/%s:%s", base, name, tag)
+
+	_, _, err := resolver.Resolve(ctx, image)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func flipLocalhost(host string) string {
 	if strings.HasPrefix(host, "127.0.0.1") {
 		return "localhost" + host[9:]
